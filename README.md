@@ -1,2 +1,6 @@
 # hamster_warrior_HTML
-hamster_warrior ne html game try
+# hamster_warrior
+# Daily fresh ideas for new games
+# Mobile compatible 
+
+
