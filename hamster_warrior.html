@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hamster Savaşçısı</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #7dd3fc;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 450px;
+            margin: 0 auto;
+            background: linear-gradient(to bottom, #7dd3fc 0%, #7dd3fc 40%, #4ade80 40%, #22c55e 100%);
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+        /* Arka Plan Ögeleri */
+        .castle {
+            position: absolute;
+            top: 25%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 50px;
+            z-index: 1;
+        }
+        .path {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 65%;
+            background: #b45309;
+            clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+            z-index: 1;
+        }
+        /* Düşman (Şövalye) */
+        #enemy {
+            position: absolute;
+            top: 35%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            font-size: 80px;
+            transition: top 0.1s linear, transform 0.1s linear;
+            z-index: 2;
+            filter: drop-shadow(0 0 10px #fff); /* Görseldeki parıltı efekti */
+        }
+        /* Can Barı */
+        #hp-bar-container {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 160px;
+            height: 25px;
+            background: #374151;
+            border: 3px solid #9ca3af;
+            border-radius: 5px;
+            z-index: 10;
+            padding: 2px;
+        }
+        #hp-bar {
+            width: 100%;
+            height: 100%;
+            background: #ef4444;
+            transition: width 0.2s ease;
+        }
+        #hp-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            top: 1px;
+            text-shadow: 1px 1px 2px black;
+        }
+        /* Oyuncunun Elleri */
+        .hand {
+            position: absolute;
+            bottom: -20px;
+            font-size: 70px;
+            z-index: 5;
+            transition: transform 0.1s ease;
+        }
+        #left-hand {
+            left: 10%;
+            transform: rotate(10deg);
+        }
+        #right-hand {
+            right: 10%;
+            transform: rotate(-10deg);
+        }
+        /* Fırlatılan Hamster */
+        .projectile {
+            position: absolute;
+            font-size: 40px;
+            z-index: 3;
+            transition: all 0.3s linear;
+        }
+        /* Skor ve Arayüz */
+        #score-board {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #1e3a8a;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 10;
+            background: rgba(255,255,255,0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        /* Kontrol Alanları (Mobil için Görünmez Butonlar) */
+        .control-zone {
+            position: absolute;
+            bottom: 0;
+            width: 50%;
+            height: 70%;
+            z-index: 6;
+            cursor: pointer;
+        }
+        #left-zone { left: 0; }
+        #right-zone { right: 0; }
+        
+        /* Efektler */
+        .slash-effect {
+            position: absolute;
+            top: 40%;
+            right: 10%;
+            font-size: 100px;
+            opacity: 0;
+            transform: scale(0.5) rotate(-45deg);
+            transition: all 0.15s ease;
+            z-index: 4;
+            pointer-events: none;
+            color: white;
+            text-shadow: 0 0 20px rgba(255,255,255,0.8);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="score-board">Skor: <span id="score">0</span></div>
+    
+    <div id="hp-bar-container">
+        <div id="hp-bar"></div>
+        <div id="hp-text">125/125</div>
+    </div>
+
+    <div class="castle">🏰</div>
+    <div class="path"></div>
+
+    <div id="enemy">🛡️</div>
+
+    <div id="slash" class="slash-effect">⚡</div>
+
+    <div id="left-hand" class="hand">🐹</div> <div id="right-hand" class="hand">⚔️</div> <div id="left-zone" class="control-zone"></div>
+    <div id="right-zone" class="control-zone"></div>
+</div>
+
+<script>
+    const enemy = document.getElementById('enemy');
+    const hpBar = document.getElementById('hp-bar');
+    const hpText = document.getElementById('hp-text');
+    const scoreElement = document.getElementById('score');
+    const leftHand = document.getElementById('left-hand');
+    const rightHand = document.getElementById('right-hand');
+    const slash = document.getElementById('slash');
+    const container = document.getElementById('game-container');
+
+    let maxHp = 125;
+    let currentHp = 125;
+    let score = 0;
+    let enemyDistance = 0; // 0 uzakta, 100 yakında (yenilgi)
+    let gameSpeed = 0.5;
+
+    // Düşmanı sıfırla (Yeni düşman getir)
+    function resetEnemy() {
+        maxHp = 100 + Math.floor(Math.random() * 100);
+        currentHp = maxHp;
+        enemyDistance = 0;
+        updateHpBar();
+        enemy.style.display = "block";
+    }
+
+    function updateHpBar() {
+        const percentage = (currentHp / maxHp) * 100;
+        hpBar.style.width = Math.max(0, percentage) + '%';
+        hpText.innerText = `${Math.max(0, currentHp)}/${maxHp}`;
+    }
+
+    // Düşmanın ilerleme döngüsü
+    setInterval(() => {
+        enemyDistance += gameSpeed;
+        
+        // Görseldeki gibi yaklaşma efektini ayarla
+        let scale = 0.5 + (enemyDistance / 100) * 1.5;
+        let topPosition = 35 + (enemyDistance / 100) * 25;
+        
+        enemy.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        enemy.style.top = topPosition + '%';
+
+        // Düşman çok yaklaştıysa oyun biter
+        if (enemyDistance >= 100) {
+            alert("Şövalye seni alt etti! Skorun: " + score);
+            score = 0;
+            scoreElement.innerText = score;
+            gameSpeed = 0.5;
+            resetEnemy();
+        }
+    }, 30);
+
+    // SOL TARAF: Hamster Fırlatma Kontrolü
+    document.getElementById('left-zone').addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        throwHamster();
+    });
+    document.getElementById('left-zone').addEventListener('mousedown', throwHamster);
+
+    function throwHamster() {
+        // Kol animasyonu
+        leftHand.style.transform = 'translateY(-30px) scale(1.2) rotate(20deg)';
+        setTimeout(() => leftHand.style.transform = 'rotate(10deg)', 100);
+
+        // Hamster fırlatma efekti
+        const hamster = document.createElement('div');
+        hamster.className = 'projectile';
+        hamster.innerText = '🐹';
+        hamster.style.left = '20%';
+        hamster.style.bottom = '15%';
+        container.appendChild(hamster);
+
+        // Hamster'ı düşmana doğru uçur
+        setTimeout(() => {
+            hamster.style.left = '50%';
+            hamster.style.bottom = (100 - parseFloat(enemy.style.top)) + '%';
+            hamster.style.transform = 'scale(0.5) rotate(720deg)';
+        }, 10);
+
+        // Hasar anı
+        setTimeout(() => {
+            hamster.remove();
+            damageEnemy(15);
+        }, 300);
+    }
+
+    // SAĞ TARAF: Kılıç Sallama Kontrolü
+    document.getElementById('right-zone').addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        swingSword();
+    });
+    document.getElementById('right-zone').addEventListener('mousedown', swingSword);
+
+    function swingSword() {
+        // Kol animasyonu
+        rightHand.style.transform = 'translateY(-40px) translateX(-20px) rotate(-45deg)';
+        setTimeout(() => rightHand.style.transform = 'rotate(-10deg)', 100);
+
+        // Görseldeki gibi beyaz/ışıklı saldırı efekti
+        slash.style.opacity = '1';
+        slash.style.transform = 'scale(1.5) rotate(0deg)';
+        
+        setTimeout(() => {
+            slash.style.opacity = '0';
+            slash.style.transform = 'scale(0.5) rotate(-45deg)';
+        }, 150);
+
+        // Kılıç sadece yakındaki düşmana vurabilir
+        if (enemyDistance > 50) {
+            damageEnemy(35);
+        }
+    }
+
+    // Hasar mekanizması
+    function damageEnemy(amount) {
+        currentHp -= amount;
+        updateHpBar();
+
+        // Düşman geriye sıçrar
+        enemyDistance = Math.max(0, enemyDistance - 8);
+
+        if (currentHp <= 0) {
+            score += 1;
+            scoreElement.innerText = score;
+            gameSpeed += 0.05; // Oyun gittikçe hızlanır
+            enemy.style.display = "none";
+            setTimeout(resetEnemy, 300);
+        }
+    }
+
+    // İlk düşmanı oluştur
+    resetEnemy();
+</script>
+
+</body>
+</html>
